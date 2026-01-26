@@ -1,7 +1,6 @@
 import os
 import boto3
 import pandas as pd
-import io
 from playwright.sync_api import sync_playwright
 
 # 1. Setup Cloudflare R2 Connection
@@ -15,7 +14,7 @@ s3 = boto3.client(
 
 BUCKET_NAME = "mf-data-bucket"
 
-# 2. Starter List (Just 2 categories for testing)
+# Test with 2 categories
 categories = [
     {"nature": "Open Ended", "cat": "Equity", "sub": "Large Cap"},
     {"nature": "Open Ended", "cat": "Equity", "sub": "Mid Cap"}
@@ -25,67 +24,75 @@ def run_scraper():
     all_dfs = []
     
     with sync_playwright() as p:
-        # Launching browser with a 'User Agent' to prevent blocking
-        browser = p.chromium.launch(headless=True)
+        # Launch browser with "Stealth" arguments
+        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800}
         )
         page = context.new_page()
         
-        print("Opening AMFI website...")
-        page.goto("https://www.amfiindia.com/otherdata/fund-performance", wait_until="networkidle")
+        try:
+            print("Opening AMFI website...")
+            # We use a longer timeout and wait for 'load'
+            page.goto("https://www.amfiindia.com/otherdata/fund-performance", wait_until="load", timeout=90000)
+            
+            # Small pause to let any pop-ups or scripts finish
+            page.wait_for_timeout(5000)
+            print(f"Page Title: {page.title()}")
 
-        for item in categories:
-            print(f"Selecting: {item['nature']} > {item['cat']} > {item['sub']}")
-            
-            # Wait for dropdowns and select
-            page.wait_for_selector("select#NavOpen")
-            page.select_option("select#NavOpen", label=item['nature'])
-            
-            page.wait_for_selector("select#Category")
-            page.select_option("select#Category", label=item['cat'])
-            
-            page.wait_for_selector("select#SubCategory")
-            page.select_option("select#SubCategory", label=item['sub'])
-            
-            # Click Go and wait for the table to appear
-            page.click("input#btnGo")
-            page.wait_for_selector("a.excel-icon", timeout=10000)
+            for item in categories:
+                print(f"Selecting: {item['sub']}...")
+                
+                # Check if the dropdown is actually there. If not, this will print the error.
+                page.wait_for_selector("select#NavOpen", timeout=30000)
+                
+                # Select the options
+                page.select_option("select#NavOpen", label=item['nature'])
+                page.wait_for_timeout(1000) # Give the site a second to refresh the next dropdown
+                
+                page.select_option("select#Category", label=item['cat'])
+                page.wait_for_timeout(1000)
+                
+                page.select_option("select#SubCategory", label=item['sub'])
+                
+                # Click Go
+                page.click("input#btnGo")
+                
+                # Wait for the Excel icon to appear (this confirms the data loaded)
+                page.wait_for_selector("a.excel-icon", timeout=30000)
 
-            # Download the Excel file
-            with page.expect_download() as download_info:
-                page.click("a.excel-icon")
-            download = download_info.value
-            
-            # Read the downloaded file into memory
-            # We use 'skiprows=4' because AMFI files have headers at the top
-            df = pd.read_excel(download.path(), skiprows=4)
-            
-            # STAMPING: Add our context columns
-            df.insert(0, 'Nature_of_Scheme', item['nature'])
-            df.insert(1, 'Category', item['cat'])
-            df.insert(2, 'Sub_Category', item['sub'])
-            
-            all_dfs.append(df)
-            print(f"Successfully captured {len(df)} funds for {item['sub']}")
+                with page.expect_download() as download_info:
+                    page.click("a.excel-icon")
+                download = download_info.value
+                
+                df = pd.read_excel(download.path(), skiprows=4)
+                df.insert(0, 'Nature_of_Scheme', item['nature'])
+                df.insert(1, 'Category', item['cat'])
+                df.insert(2, 'Sub_Category', item['sub'])
+                
+                all_dfs.append(df)
+                print(f"Success! Captured {len(df)} funds.")
 
-        # Combine both categories into one master table
-        master_df = pd.concat(all_dfs, ignore_index=True)
-        
-        # Convert to JSON string
-        json_output = master_df.to_json(orient='records')
-        
-        # 3. Upload to Cloudflare R2
-        print("Uploading master file to Cloudflare R2...")
-        s3.put_object(
-            Bucket=BUCKET_NAME,
-            Key='master_mf_data.json',
-            Body=json_output,
-            ContentType='application/json'
-        )
-        print("All done! Master file is now in R2.")
-        
-        browser.close()
+            # Merge and Upload
+            master_df = pd.concat(all_dfs, ignore_index=True)
+            s3.put_object(
+                Bucket=BUCKET_NAME,
+                Key='master_mf_data.json',
+                Body=master_df.to_json(orient='records'),
+                ContentType='application/json'
+            )
+            print("Master file uploaded to R2 successfully!")
+
+        except Exception as e:
+            print(f"ERROR OCCURRED: {e}")
+            # DEBUG: Print what the robot actually sees on the page
+            print("DEBUG: Current page content snippet:")
+            print(page.content()[:1000]) # Prints the first 1000 characters of code
+            raise e
+
+        finally:
+            browser.close()
 
 if __name__ == "__main__":
     run_scraper()
