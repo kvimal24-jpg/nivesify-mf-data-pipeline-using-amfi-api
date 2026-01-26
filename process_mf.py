@@ -1,7 +1,7 @@
 import os, boto3, pandas as pd
 from playwright.sync_api import sync_playwright
 
-# 1. Setup R2 (Same as before)
+# 1. Setup R2 (Using your saved Secrets)
 s3 = boto3.client(
     service_name='s3',
     endpoint_url=f"https://{os.getenv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
@@ -10,7 +10,7 @@ s3 = boto3.client(
     region_name="auto"
 )
 
-# Testing categories
+# Test Categories
 categories = [
     {"nature": "Open Ended", "cat": "Equity", "sub": "Large Cap"},
     {"nature": "Open Ended", "cat": "Equity", "sub": "Mid Cap"}
@@ -20,39 +20,39 @@ def run_scraper():
     all_dfs = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Use a real browser profile
         context = browser.new_context(viewport={'width': 1280, 'height': 800})
         page = context.new_page()
 
         print("Opening AMFI website...")
-        # wait_until="networkidle" is key for Next.js sites
         page.goto("https://www.amfiindia.com/otherdata/fund-performance", wait_until="networkidle")
 
         for item in categories:
-            print(f"Selecting: {item['nature']} > {item['cat']} > {item['sub']}")
+            print(f"Processing: {item['sub']}...")
             
-            # MODERN SELECTOR: We look for the dropdowns by their visible text or generic tags
-            # because Next.js often hides the real <select> element.
+            # Instead of 'selecting', we are clicking the labels and then the options
             try:
-                # Step A: Select Nature (Open Ended)
-                page.get_by_label("Nature of Scheme").select_option(label=item['nature'])
-                page.wait_for_timeout(1000)
-                
-                # Step B: Select Category (Equity)
-                page.get_by_label("Category").select_option(label=item['cat'])
-                page.wait_for_timeout(1000)
-                
-                # Step C: Select Sub-Category (Large Cap)
-                page.get_by_label("Sub Category").select_option(label=item['sub'])
-                
-                # Step D: Click Go
+                # Nature Dropdown
+                page.get_by_text("Nature of Scheme").click()
+                page.get_by_text(item['nature'], exact=True).click()
+                page.wait_for_timeout(500)
+
+                # Category Dropdown
+                page.get_by_text("Category", exact=True).click()
+                page.get_by_text(item['cat'], exact=True).click()
+                page.wait_for_timeout(500)
+
+                # Sub Category Dropdown
+                page.get_by_text("Sub Category").click()
+                page.get_by_text(item['sub'], exact=True).click()
+
+                # Click Go
                 page.get_by_role("button", name="Go").click()
                 
-                # Step E: Wait for Excel Icon
+                # Wait for Excel to be ready
                 page.wait_for_selector("a.excel-icon", timeout=20000)
                 
                 with page.expect_download() as download_info:
-                    page.get_by_role("link", name="Excel").first.click()
+                    page.locator("a.excel-icon").click()
                 
                 download = download_info.value
                 df = pd.read_excel(download.path(), skiprows=4)
@@ -62,17 +62,11 @@ def run_scraper():
                 df.insert(1, 'Category', item['cat'])
                 df.insert(2, 'Sub_Category', item['sub'])
                 all_dfs.append(df)
-                print(f"Captured {len(df)} schemes.")
+                print(f"Captured data for {item['sub']}")
 
             except Exception as e:
-                print(f"Failed to find dropdowns for {item['sub']}. The site might be using custom UI components.")
-                # FALLBACK: Try selecting by generic dropdown order if labels fail
-                page.locator("select").nth(0).select_option(label=item['nature'])
-                page.locator("select").nth(1).select_option(label=item['cat'])
-                page.locator("select").nth(2).select_option(label=item['sub'])
-                page.get_by_role("button", name="Go").click()
+                print(f"Failed to click dropdown for {item['sub']}. Error: {e}")
 
-        # Finalize and Upload
         if all_dfs:
             master_df = pd.concat(all_dfs, ignore_index=True)
             s3.put_object(
@@ -81,7 +75,7 @@ def run_scraper():
                 Body=master_df.to_json(orient='records'),
                 ContentType='application/json'
             )
-            print("Successfully uploaded Master File to R2.")
+            print("Successfully uploaded Master File to Cloudflare R2!")
         
         browser.close()
 
