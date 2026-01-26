@@ -1,4 +1,7 @@
-import os, boto3, pandas as pd
+import os
+import boto3
+import pandas as pd
+import io
 from playwright.sync_api import sync_playwright
 
 # 1. Setup Cloudflare R2 Connection
@@ -10,58 +13,79 @@ s3 = boto3.client(
     region_name="auto"
 )
 
-# 2. Define the Navigation Map (Review List)
+BUCKET_NAME = "mf-data-bucket"
+
+# 2. Starter List (Just 2 categories for testing)
 categories = [
     {"nature": "Open Ended", "cat": "Equity", "sub": "Large Cap"},
-    {"nature": "Open Ended", "cat": "Equity", "sub": "Mid Cap"},
-    # ... (I will include the full list of 30 in the final file for you)
+    {"nature": "Open Ended", "cat": "Equity", "sub": "Mid Cap"}
 ]
 
 def run_scraper():
     all_dfs = []
+    
     with sync_playwright() as p:
+        # Launching browser with a 'User Agent' to prevent blocking
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        # ... (previous code remains the same) ...
-        page.goto("https://www.amfiindia.com/otherdata/fund-performance")
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+        
+        print("Opening AMFI website...")
+        page.goto("https://www.amfiindia.com/otherdata/fund-performance", wait_until="networkidle")
 
         for item in categories:
-            print(f"Processing: {item['sub']}")
+            print(f"Selecting: {item['nature']} > {item['cat']} > {item['sub']}")
             
-            # 1. NEW: Wait for the dropdown to exist before trying to click it
-            page.wait_for_selector("select#NavOpen", timeout=60000) 
-            
-            # 2. Now select the options
+            # Wait for dropdowns and select
+            page.wait_for_selector("select#NavOpen")
             page.select_option("select#NavOpen", label=item['nature'])
+            
+            page.wait_for_selector("select#Category")
             page.select_option("select#Category", label=item['cat'])
+            
+            page.wait_for_selector("select#SubCategory")
             page.select_option("select#SubCategory", label=item['sub'])
             
-            # 3. Click 'Go' and wait for the page to update
+            # Click Go and wait for the table to appear
             page.click("input#btnGo")
-            page.wait_for_load_state("networkidle") # This tells the robot to wait for the spinning wheel to stop
-            
-            # ... (the rest of the download logic remains the same) ...
-            
-            # Robot waits for Excel and downloads it
+            page.wait_for_selector("a.excel-icon", timeout=10000)
+
+            # Download the Excel file
             with page.expect_download() as download_info:
                 page.click("a.excel-icon")
             download = download_info.value
-            path = download.path()
-
-            # STAMPING: Add the context columns
-            df = pd.read_excel(path, skiprows=4) # AMFI files have 4 junk rows at top
-            df.insert(0, 'Nature', item['nature'])
+            
+            # Read the downloaded file into memory
+            # We use 'skiprows=4' because AMFI files have headers at the top
+            df = pd.read_excel(download.path(), skiprows=4)
+            
+            # STAMPING: Add our context columns
+            df.insert(0, 'Nature_of_Scheme', item['nature'])
             df.insert(1, 'Category', item['cat'])
-            df.insert(2, 'SubCategory', item['sub'])
+            df.insert(2, 'Sub_Category', item['sub'])
+            
             all_dfs.append(df)
+            print(f"Successfully captured {len(df)} funds for {item['sub']}")
 
-        # FINAL MERGE: Combine all 30 files into one Master Table
+        # Combine both categories into one master table
         master_df = pd.concat(all_dfs, ignore_index=True)
-        master_json = master_df.to_json(orient='records')
         
-        # UPLOAD to Cloudflare R2
-        s3.put_object(Bucket="mf-data-bucket", Key="master_mf_data.json", Body=master_json)
-        print("Master File Updated Successfully!")
+        # Convert to JSON string
+        json_output = master_df.to_json(orient='records')
+        
+        # 3. Upload to Cloudflare R2
+        print("Uploading master file to Cloudflare R2...")
+        s3.put_object(
+            Bucket=BUCKET_NAME,
+            Key='master_mf_data.json',
+            Body=json_output,
+            ContentType='application/json'
+        )
+        print("All done! Master file is now in R2.")
+        
+        browser.close()
 
 if __name__ == "__main__":
     run_scraper()
