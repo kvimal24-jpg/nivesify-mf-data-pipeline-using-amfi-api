@@ -22,15 +22,25 @@ def run_scraper():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+        # ... (previous code remains the same) ...
         page.goto("https://www.amfiindia.com/otherdata/fund-performance")
 
         for item in categories:
             print(f"Processing: {item['sub']}")
-            # Robot selects the dropdowns and clicks 'Go'
+            
+            # 1. NEW: Wait for the dropdown to exist before trying to click it
+            page.wait_for_selector("select#NavOpen", timeout=60000) 
+            
+            # 2. Now select the options
             page.select_option("select#NavOpen", label=item['nature'])
             page.select_option("select#Category", label=item['cat'])
             page.select_option("select#SubCategory", label=item['sub'])
+            
+            # 3. Click 'Go' and wait for the page to update
             page.click("input#btnGo")
+            page.wait_for_load_state("networkidle") # This tells the robot to wait for the spinning wheel to stop
+            
+            # ... (the rest of the download logic remains the same) ...
             
             # Robot waits for Excel and downloads it
             with page.expect_download() as download_info:
