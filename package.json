@@ -22,5 +22,18 @@
     "eslint-config-next": "16.1.4",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "eslint",
+  "etl": "node etl/amfi_pipeline.js"
+},
+  "dependencies": {
+  "next": "16.1.4",
+  "react": "19.2.3",
+  "react-dom": "19.2.3",
+  "exceljs": "^4.4.0"
+}
 }
