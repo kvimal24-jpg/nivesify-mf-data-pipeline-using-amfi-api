@@ -26,7 +26,7 @@ const HEADERS = {
 
 // Bounds
 const MAX_MATURITY = 2;
-const MAX_CATEGORY = 7;
+const MAX_CATEGORY = 6;
 const MAX_SUBCATEGORY = 70;
 const ETF_SUBCATEGORY_CODE = 38;
 const MFID = 0;
