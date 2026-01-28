@@ -1,0 +1,66 @@
+name: AMFI Daily ETL → R2
+
+on:
+  schedule:
+    - cron: '15 2 * * *'   # Runs daily at 02:15 UTC (adjust as desired)
+  workflow_dispatch:       # Allow manual run with "Run workflow" button
+
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: mf-data-bucket
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      # Optional: override report date (YYYY-MM-DD) for backfills
+      # REPORT_DATE: 2026-01-23
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run ETL (JS → JSON + Excel)
+        run: npm run etl
+
+      - name: Read dateTag from manifest
+        id: meta
+        run: |
+          echo "DATE_TAG=$(node -p "require('./dist/manifest.json').dateTag")" >> $GITHUB_ENV
+          echo "REPORT_DATE=$(node -p "require('./dist/manifest.json').reportDate")" >> $GITHUB_ENV
+          echo "dateTag=$DATE_TAG" >> $GITHUB_OUTPUT
+          echo "reportDate=$REPORT_DATE" >> $GITHUB_OUTPUT
+
+      - name: Install AWS CLI (for R2 S3-compatible upload)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install awscli --user
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Configure AWS (R2)
+        run: |
+          aws configure set aws_access_key_id "$R2_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
+          aws configure set default.region "auto"
+
+      - name: Upload to R2 → latest/
+        run: |
+          aws s3 cp ./dist s3://$R2_BUCKET/data/latest/ \
+            --recursive \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=300"
+
+      - name: Upload to R2 → archive/${{ env.DATE_TAG }}/
+        run: |
+          aws s3 cp ./dist s3://$R2_BUCKET/data/archive/${{ env.DATE_TAG }}/ \
+            --recursive \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable"
