@@ -15,7 +15,9 @@ jobs:
       R2_BUCKET: mf-data-bucket
       R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
       # Optional: override report date (YYYY-MM-DD) for backfills
-      # REPORT_DATE: 2026-01-23
+      REPORT_DATE: 2026-01-23
+      
+      
 
     steps:
       - uses: actions/checkout@v4
