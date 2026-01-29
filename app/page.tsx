@@ -58,7 +58,7 @@ export default function Home() {
               <p className="mb-2 text-zinc-900 dark:text-zinc-200">Expose fund behavior, not rankings. Focus on consistency, cost, drawdowns, and mandate discipline. ₹9/day unlock for full metrics.</p>
               <div className="text-xs mb-2 text-zinc-700 dark:text-zinc-300">A screener for thinking investors, not chasers.</div>
               <div className="flex-1" />
-              <a href="#" className="mt-6 w-full rounded-full bg-[#0f766e] px-4 py-2 text-white font-semibold shadow hover:bg-[#115e59] transition">Try Now</a>
+              <a href="/screener" className="mt-6 w-full rounded-full bg-[#0f766e] px-4 py-2 text-white font-semibold shadow hover:bg-[#115e59] transition">Try Now</a>
             </div>
             {/* Tool 3: Financial Planning Calculators */}
             <div className="rounded-2xl p-6 flex flex-col items-center text-center h-full justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
