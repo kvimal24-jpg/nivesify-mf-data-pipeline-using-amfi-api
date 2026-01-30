@@ -2,7 +2,7 @@ name: AMFI Daily ETL → R2
 
 on:
   schedule:
-    - cron: '15 2 * * *'   # Runs daily at 02:15 UTC (adjust as desired)
+    - cron: '15 18 * * *'   
   workflow_dispatch:       # Allow manual run with "Run workflow" button
 
 jobs:
