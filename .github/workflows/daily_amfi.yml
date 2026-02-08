@@ -53,12 +53,24 @@ jobs:
           aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
           aws configure set default.region "auto"
 
-      - name: Upload to R2 → latest/
+      - name: Clean old dated files from latest/
+        run: |
+          echo "Removing old dated files from latest/ folder..."
+          aws s3 rm s3://$R2_BUCKET/data/latest/ \
+            --recursive \
+            --endpoint-url "$R2_ENDPOINT" \
+            --exclude "*" \
+            --include "amfi_raw_*.json" \
+            --include "amfi_analysis_*.xlsx" || true
+
+      - name: Upload to R2 → latest/ (exclude dated files)
         run: |
           aws s3 cp ./dist s3://$R2_BUCKET/data/latest/ \
             --recursive \
             --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "public, max-age=300"
+            --cache-control "public, max-age=300" \
+            --exclude "amfi_raw_*.json" \
+            --exclude "amfi_analysis_*.xlsx"
 
       - name: Upload to R2 → archive/${{ env.DATE_TAG }}/
         run: |
