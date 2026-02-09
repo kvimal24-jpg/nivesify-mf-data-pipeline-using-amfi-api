@@ -53,34 +53,25 @@ jobs:
           aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
           aws configure set default.region "auto"
 
-      - name: Clean old dated files from latest/
+      - name: Upload to R2 → latest/ (all current files)
         run: |
-          echo "Removing old dated files from latest/ folder..."
-          aws s3 rm s3://$R2_BUCKET/data/latest/ \
+          aws s3 cp ./dist s3://$R2_BUCKET/data/latest/ \
             --recursive \
             --endpoint-url "$R2_ENDPOINT" \
-            --exclude "*" \
-            --include "amfi_raw_*.json" \
-            --include "amfi_analysis_*.xlsx" || true
+            --cache-control "public, max-age=300"
 
-      - name: Upload to R2 → latest/ (only essential files)
+      - name: Clean old dated files from latest/ (keep today's)
         run: |
-          # Upload only the 4 essential JSON files
-          aws s3 cp ./dist/fund-analytics.json s3://$R2_BUCKET/data/latest/fund-analytics.json \
-            --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "public, max-age=300"
-          
-          aws s3 cp ./dist/etf-analytics.json s3://$R2_BUCKET/data/latest/etf-analytics.json \
-            --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "public, max-age=300"
-          
-          aws s3 cp ./dist/industry-and-category-insights.json s3://$R2_BUCKET/data/latest/industry-and-category-insights.json \
-            --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "public, max-age=300"
-          
-          aws s3 cp ./dist/manifest.json s3://$R2_BUCKET/data/latest/manifest.json \
-            --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "public, max-age=300"
+          echo "Removing old dated files (keeping today's: $DATE_TAG)..."
+          # List all dated files
+          aws s3 ls s3://$R2_BUCKET/data/latest/ --endpoint-url "$R2_ENDPOINT" | \
+            grep -E "(amfi_raw_|amfi_analysis_)" | \
+            grep -v "$DATE_TAG" | \
+            awk '{print $4}' | \
+            while read file; do
+              echo "Deleting old file: $file"
+              aws s3 rm "s3://$R2_BUCKET/data/latest/$file" --endpoint-url "$R2_ENDPOINT" || true
+            done
 
       - name: Upload to R2 → archive/${{ env.DATE_TAG }}/
         run: |
