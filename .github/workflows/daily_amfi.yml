@@ -60,19 +60,6 @@ jobs:
             --endpoint-url "$R2_ENDPOINT" \
             --cache-control "public, max-age=300"
 
-      - name: Clean old dated files from latest/ (keep today's)
-        run: |
-          echo "Removing old dated files (keeping today's: $DATE_TAG)..."
-          # List all dated files
-          aws s3 ls s3://$R2_BUCKET/data/latest/ --endpoint-url "$R2_ENDPOINT" | \
-            grep -E "(amfi_raw_|amfi_analysis_)" | \
-            grep -v "$DATE_TAG" | \
-            awk '{print $4}' | \
-            while read file; do
-              echo "Deleting old file: $file"
-              aws s3 rm "s3://$R2_BUCKET/data/latest/$file" --endpoint-url "$R2_ENDPOINT" || true
-            done
-
       - name: Upload to R2 → archive/${{ env.DATE_TAG }}/
         run: |
           aws s3 cp ./dist s3://$R2_BUCKET/data/archive/${{ env.DATE_TAG }}/ \

@@ -46,11 +46,11 @@ REPORT_DATE=2026-02-07 npm run etl
 
 The pipeline generates files in the `dist/` directory:
 
-1. **`amfi_raw_[date].json`** - Complete raw data snapshot
+1. **`amfi_raw.json`** - Complete raw data snapshot
 2. **`industry-and-category-insights.json`** - Aggregated market-level analytics
 3. **`fund-analytics.json`** - Active fund rankings with composite scores
 4. **`etf-analytics.json`** - ETF performance and tracking analysis
-5. **`amfi_analysis_[date].xlsx`** - Excel workbook with all tabs
+5. **`amfi_analysis.xlsx`** - Excel workbook with all tabs
 6. **`manifest.json`** - Metadata (dateTag, counts)
 
 ## 📊 Data Schema
@@ -221,7 +221,7 @@ mf-data-bucket/
 │   │   ├── etf-analytics.json
 │   │   ├── industry-and-category-insights.json
 │   │   ├── manifest.json
-│   │   └── amfi_analysis_[date].xlsx
+│   │   └── amfi_analysis.xlsx
 │   └── archive/                         # Historical
 │       ├── 2026-02-07/
 │       ├── 2026-02-06/

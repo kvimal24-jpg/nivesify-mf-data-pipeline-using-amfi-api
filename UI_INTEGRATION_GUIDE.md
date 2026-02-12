@@ -33,7 +33,8 @@ mf-data-bucket/
 │   │   ├── etf-analytics.json              # ETF performance data
 │   │   ├── industry-and-category-insights.json  # Market overview
 │   │   ├── manifest.json                   # Metadata (timestamp, counts)
-│   │   └── amfi_analysis_[date].xlsx       # Excel report (optional)
+│   │   ├── amfi_raw.json                   # Raw data snapshot
+│   │   └── amfi_analysis.xlsx              # Excel report (optional)
 │   └── archive/                             # Historical snapshots
 │       ├── 2026-02-07/                     # All files from that date
 │       ├── 2026-02-06/

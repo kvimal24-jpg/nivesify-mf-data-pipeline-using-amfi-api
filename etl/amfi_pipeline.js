@@ -178,7 +178,7 @@ async function run() {
   }
 
   // Optional: write raw snapshot (handy for debugging)
-  fs.writeFileSync(path.join(OUT_DIR, `amfi_raw_${DATE_TAG}.json`), JSON.stringify(RAW, null, 2));
+  fs.writeFileSync(path.join(OUT_DIR, 'amfi_raw.json'), JSON.stringify(RAW, null, 2));
 
   /* ===== TAB: INDUSTRY & CATEGORY INSIGHTS ===== */
   const INSIGHTS = [];
@@ -373,7 +373,7 @@ async function run() {
   addSheet('Fund_Analytics', FUND_ANALYTICS);
   addSheet('ETF_Analytics', ETF_ANALYTICS);
 
-  await wb.xlsx.writeFile(path.join(OUT_DIR, `amfi_analysis_${DATE_TAG}.xlsx`));
+  await wb.xlsx.writeFile(path.join(OUT_DIR, 'amfi_analysis.xlsx'));
   console.log('PIPELINE COMPLETE');
 }
 
