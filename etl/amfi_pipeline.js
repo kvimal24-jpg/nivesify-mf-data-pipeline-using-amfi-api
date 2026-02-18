@@ -221,60 +221,116 @@ async function run() {
   const ACTIVE = RAW.filter((r) => r.Sub_Category_Code !== ETF_SUBCATEGORY_CODE);
 
   Object.entries(groupBy(ACTIVE, 'Sub_Category')).forEach(([sub, rows]) => {
-    // Eligible rows for range calc
-    const eligible = rows.filter(
-      (r) => isFiniteNum(r.return3YearDirect) && isFiniteNum(r.return3YearBenchmark) && isFiniteNum(r.ir3YrDirect)
-    );
+    // Only update Hybrid and Debt categories
+    const cat = rows[0]?.Category;
+    if (cat === 'Hybrid' || cat === 'Debt') {
+      // Compute alpha for available periods
+      const alpha1Arr = rows.map(r => isFiniteNum(r.return1YearDirect) && isFiniteNum(r.return1YearBenchmark) ? r.return1YearDirect - r.return1YearBenchmark : null).filter(isFiniteNum);
+      const alpha3Arr = rows.map(r => isFiniteNum(r.return3YearDirect) && isFiniteNum(r.return3YearBenchmark) ? r.return3YearDirect - r.return3YearBenchmark : null).filter(isFiniteNum);
+      const alpha5Arr = rows.map(r => isFiniteNum(r.return5YearDirect) && isFiniteNum(r.return5YearBenchmark) ? r.return5YearDirect - r.return5YearBenchmark : null).filter(isFiniteNum);
+      const aumArr = rows.map(r => isFiniteNum(r.dailyAUM) ? r.dailyAUM : null).filter(isFiniteNum);
 
-    const a3Arr = eligible.map((r) => r.return3YearDirect - r.return3YearBenchmark).filter(isFiniteNum);
-    const a5Arr = eligible.map((r) => (isFiniteNum(r.return5YearDirect) && isFiniteNum(r.return5YearBenchmark))
-      ? (r.return5YearDirect - r.return5YearBenchmark) : NaN).filter(isFiniteNum);
-    const i3Arr = eligible.map((r) => r.ir3YrDirect).filter(isFiniteNum);
-    const i5Arr = eligible.map((r) => r.ir5YrDirect).filter(isFiniteNum);
+      // Compute percentiles for each period
+      function getPercentile(val, arr) {
+        if (!isFiniteNum(val) || arr.length === 0) return null;
+        const sorted = [...arr].sort((a, b) => a - b);
+        const idx = sorted.findIndex(x => x === val);
+        return idx >= 0 ? 100 * idx / (sorted.length - 1) : null;
+      }
 
-    const a3min = Math.min(...a3Arr), a3max = Math.max(...a3Arr);
-    const a5min = Math.min(...a5Arr), a5max = Math.max(...a5Arr);
-    const i3min = Math.min(...i3Arr), i3max = Math.max(...i3Arr);
-    const i5min = Math.min(...i5Arr), i5max = Math.max(...i5Arr);
+      // Top 25% AUM bonus
+      const aumThreshold = aumArr.length ? aumArr.sort((a, b) => b - a)[Math.floor(aumArr.length * 0.25)] : null;
 
-    rows.forEach((r) => {
-      const alpha3 = isFiniteNum(r.return3YearDirect) && isFiniteNum(r.return3YearBenchmark)
-        ? r.return3YearDirect - r.return3YearBenchmark : null;
-      const alpha5 = isFiniteNum(r.return5YearDirect) && isFiniteNum(r.return5YearBenchmark)
-        ? r.return5YearDirect - r.return5YearBenchmark : null;
+      rows.forEach(r => {
+        const alpha1 = isFiniteNum(r.return1YearDirect) && isFiniteNum(r.return1YearBenchmark) ? r.return1YearDirect - r.return1YearBenchmark : null;
+        const alpha3 = isFiniteNum(r.return3YearDirect) && isFiniteNum(r.return3YearBenchmark) ? r.return3YearDirect - r.return3YearBenchmark : null;
+        const alpha5 = isFiniteNum(r.return5YearDirect) && isFiniteNum(r.return5YearBenchmark) ? r.return5YearDirect - r.return5YearBenchmark : null;
+        const aum = isFiniteNum(r.dailyAUM) ? r.dailyAUM : null;
 
-      const n1 = safeNormalize(alpha3, a3min, a3max);
-      const n2 = safeNormalize(alpha5, a5min, a5max);
-      const n3 = safeNormalize(r.ir3YrDirect, i3min, i3max);
-      const n4 = safeNormalize(r.ir5YrDirect, i5min, i5max);
+        // Compute percentiles for available periods
+        const p1 = getPercentile(alpha1, alpha1Arr);
+        const p3 = getPercentile(alpha3, alpha3Arr);
+        const p5 = getPercentile(alpha5, alpha5Arr);
+        // Only use available periods
+        const percentiles = [p1, p3, p5].filter(x => x !== null);
+        // If no data, score is 0
+        let score = percentiles.length ? percentiles.reduce((a, b) => a + b, 0) / percentiles.length : 0;
+        // AUM bonus
+        if (aumThreshold && aum >= aumThreshold) score += 5;
 
-      const ok = isFiniteNum(r.return3YearDirect) && isFiniteNum(r.ir3YrDirect);
-      const score = ok ? 0.25 * (n1 + n2 + n3 + n4) : 0;
-
-      FUND_ANALYTICS.push({
-        Fund_Name: r.schemeName,
-        AMC: r.amc ?? null,
-        Category: r.Category,
-        Sub_Category: sub,
-        Benchmark_Name: r.benchmark,
-        Maturity_Type: r.Maturity_Type,
-        Current_AUM: r.dailyAUM,
-        Fund_Return_1Y: r.return1YearDirect,
-        Benchmark_Return_1Y: r.return1YearBenchmark,
-        Alpha_1Y: isFiniteNum(r.return1YearDirect) && isFiniteNum(r.return1YearBenchmark)
-          ? r.return1YearDirect - r.return1YearBenchmark : null,
-        Fund_Return_3Y: r.return3YearDirect,
-        Benchmark_Return_3Y: r.return3YearBenchmark,
-        Alpha_3Y: alpha3,
-        Fund_Return_5Y: r.return5YearDirect,
-        Benchmark_Return_5Y: r.return5YearBenchmark,
-        Alpha_5Y: alpha5,
-        IR_1Y: r.ir1YrDirect,
-        IR_3Y: r.ir3YrDirect,
-        IR_5Y: r.ir5YrDirect,
-        Composite_Score: score
+        FUND_ANALYTICS.push({
+          Fund_Name: r.schemeName,
+          AMC: r.amc ?? null,
+          Category: r.Category,
+          Sub_Category: sub,
+          Benchmark_Name: r.benchmark,
+          Maturity_Type: r.Maturity_Type,
+          Current_AUM: r.dailyAUM,
+          Fund_Return_1Y: r.return1YearDirect,
+          Benchmark_Return_1Y: r.return1YearBenchmark,
+          Alpha_1Y: alpha1,
+          Fund_Return_3Y: r.return3YearDirect,
+          Benchmark_Return_3Y: r.return3YearBenchmark,
+          Alpha_3Y: alpha3,
+          Fund_Return_5Y: r.return5YearDirect,
+          Benchmark_Return_5Y: r.return5YearBenchmark,
+          Alpha_5Y: alpha5,
+          IR_1Y: r.ir1YrDirect,
+          IR_3Y: r.ir3YrDirect,
+          IR_5Y: r.ir5YrDirect,
+          Composite_Score: score
+        });
       });
-    });
+    } else {
+      // ...existing code...
+      const eligible = rows.filter(
+        (r) => isFiniteNum(r.return3YearDirect) && isFiniteNum(r.return3YearBenchmark) && isFiniteNum(r.ir3YrDirect)
+      );
+      const a3Arr = eligible.map((r) => r.return3YearDirect - r.return3YearBenchmark).filter(isFiniteNum);
+      const a5Arr = eligible.map((r) => (isFiniteNum(r.return5YearDirect) && isFiniteNum(r.return5YearBenchmark))
+        ? (r.return5YearDirect - r.return5YearBenchmark) : NaN).filter(isFiniteNum);
+      const i3Arr = eligible.map((r) => r.ir3YrDirect).filter(isFiniteNum);
+      const i5Arr = eligible.map((r) => r.ir5YrDirect).filter(isFiniteNum);
+      const a3min = Math.min(...a3Arr), a3max = Math.max(...a3Arr);
+      const a5min = Math.min(...a5Arr), a5max = Math.max(...a5Arr);
+      const i3min = Math.min(...i3Arr), i3max = Math.max(...i3Arr);
+      const i5min = Math.min(...i5Arr), i5max = Math.max(...i5Arr);
+      rows.forEach((r) => {
+        const alpha3 = isFiniteNum(r.return3YearDirect) && isFiniteNum(r.return3YearBenchmark)
+          ? r.return3YearDirect - r.return3YearBenchmark : null;
+        const alpha5 = isFiniteNum(r.return5YearDirect) && isFiniteNum(r.return5YearBenchmark)
+          ? r.return5YearDirect - r.return5YearBenchmark : null;
+        const n1 = safeNormalize(alpha3, a3min, a3max);
+        const n2 = safeNormalize(alpha5, a5min, a5max);
+        const n3 = safeNormalize(r.ir3YrDirect, i3min, i3max);
+        const n4 = safeNormalize(r.ir5YrDirect, i5min, i5max);
+        const ok = isFiniteNum(r.return3YearDirect) && isFiniteNum(r.ir3YrDirect);
+        const score = ok ? 0.25 * (n1 + n2 + n3 + n4) : 0;
+        FUND_ANALYTICS.push({
+          Fund_Name: r.schemeName,
+          AMC: r.amc ?? null,
+          Category: r.Category,
+          Sub_Category: sub,
+          Benchmark_Name: r.benchmark,
+          Maturity_Type: r.Maturity_Type,
+          Current_AUM: r.dailyAUM,
+          Fund_Return_1Y: r.return1YearDirect,
+          Benchmark_Return_1Y: r.return1YearBenchmark,
+          Alpha_1Y: isFiniteNum(r.return1YearDirect) && isFiniteNum(r.return1YearBenchmark)
+            ? r.return1YearDirect - r.return1YearBenchmark : null,
+          Fund_Return_3Y: r.return3YearDirect,
+          Benchmark_Return_3Y: r.return3YearBenchmark,
+          Alpha_3Y: alpha3,
+          Fund_Return_5Y: r.return5YearDirect,
+          Benchmark_Return_5Y: r.return5YearBenchmark,
+          Alpha_5Y: alpha5,
+          IR_1Y: r.ir1YrDirect,
+          IR_3Y: r.ir3YrDirect,
+          IR_5Y: r.ir5YrDirect,
+          Composite_Score: score
+        });
+      });
+    }
   });
 
   Object.values(groupBy(FUND_ANALYTICS, 'Sub_Category')).forEach((arr) => {

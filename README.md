@@ -123,12 +123,13 @@ The workflow uses these GitHub secrets:
 ## 📈 Analytics Features
 
 ### Active Funds
-- **Composite Score**: Weighted combination of:
-  - Alpha (3Y & 5Y): 50%
-  - Information Ratio (3Y & 5Y): 50%
-- **Percentile Rankings** within subcategory
-- **Top 10% Flag** for quick filtering
-- Safe normalization for small peer groups
+**Composite Score:**
+  - **Equity:** Weighted combination of Alpha (3Y & 5Y) and Information Ratio (3Y & 5Y) (unchanged)
+  - **Hybrid & Debt:** Percentile-based scoring using Alpha for available periods (1Y, 3Y, 5Y). Composite score is the average percentile of alpha within the subcategory, plus a small bonus for top 25% AUM. No Information Ratio is used.
+  - **Missing Data:** Funds with fewer periods (e.g., only 1Y) are scored only on available data, but do not get undue advantage. Funds with no valid alpha are scored as zero.
+  - **Ranking:** Funds are ranked within their subcategory by composite score. Percentile and top 10% flag are provided for filtering.
+  - **No header changes:** All output fields remain the same for compatibility.
+  - **Safe normalization:** Small peer groups and missing data are handled robustly.
 
 ### ETFs
 - **Tracking Difference Analysis** (1Y, 3Y)
