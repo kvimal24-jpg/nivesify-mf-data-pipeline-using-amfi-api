@@ -1,0 +1,26 @@
+name: Set R2 CORS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-cors:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install AWS S3 SDK
+        run: npm install --no-save @aws-sdk/client-s3
+
+      - name: Apply CORS to R2 bucket
+        run: node scripts/set-cors.mjs
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
